@@ -1,13 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>3D Endless Runner</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Dodger</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="score">0m</div>
-    <div id="game-info"></div>
+    <div id="transition" class="transition"></div>
+    
+    <div id="menu" class="menu">
+        <h1>SPACE DODGER</h1>
+        <button id="startBtn" class="neon-btn">START</button>
+        <button id="quitBtn" class="neon-btn">QUIT</button>
+    </div>
+
+    <div id="hud" class="hud hidden">
+        <div class="hud-section">
+            <div class="hud-title">DISTANCE</div>
+            <div id="distance" class="hud-value">0.0 km</div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-title">HEALTH</div>
+            <div id="hearts">❤️❤️❤️</div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-title">SHIELD</div>
+            <div id="shield" class="hud-value">READY</div>
+        </div>
+    </div>
+
+    <div id="pauseMenu" class="pause-menu hidden">
+        <h2>PAUSED</h2>
+        <button id="resumeBtn" class="neon-btn small">RESUME</button>
+        <button id="quitToMenuBtn" class="neon-btn small">QUIT TO MENU</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>   
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="main.js"></script>
 </body>
