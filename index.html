@@ -10,6 +10,7 @@
 <body>
     <div id="transition" class="transition"></div>
     
+    <!-- Menu is now visible by default, not hidden -->
     <div id="menu" class="menu">
         <h1>SPACE DODGER</h1>
         <button id="startBtn" class="neon-btn">START</button>
@@ -38,8 +39,63 @@
     </div>
 
     <canvas id="gameCanvas"></canvas>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>   
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script>
+    // --- PATCHED: spaceship orientation, menu, and shield fixes ---
+
+    // Save original main.js init and startGame for later use
+    let _mainInit, _mainStartGame;
+    // Wait for main.js to load
+    window.addEventListener('DOMContentLoaded', () => {
+        // Wait for main.js to define init/startGame
+        let waitMain = setInterval(() => {
+            if (typeof init === 'function' && typeof startGame === 'function') {
+                clearInterval(waitMain);
+
+                // Patch: menu should be visible on load, not hidden
+                document.getElementById('menu').classList.remove('hidden');
+                document.getElementById('hud').classList.add('hidden');
+                document.getElementById('pauseMenu').classList.add('hidden');
+                document.getElementById('transition').style.opacity = 0;
+
+                // Patch: override startGame to ensure menu works as expected
+                _mainStartGame = startGame;
+                window.startGame = function() {
+                    document.getElementById('transition').style.opacity = 1;
+                    setTimeout(() => {
+                        document.getElementById('transition').style.opacity = 0;
+                        document.getElementById('menu').classList.add('hidden');
+                        document.getElementById('hud').classList.remove('hidden');
+                        // Call original startGame logic if needed
+                        if (_mainStartGame) _mainStartGame();
+                    }, 800);
+                };
+
+                // Patch: spaceship orientation and shield fix
+                // Wait for player model to be loaded
+                let playerCheck = setInterval(() => {
+                    if (window.player && window.playerModelLoaded) {
+                        clearInterval(playerCheck);
+                        // Spaceship: set rotation so it faces forward (Z-) and is horizontal
+                        // Assuming model originally faces Y+ (up), rotate to Z- (forward)
+                        window.player.rotation.set(Math.PI / 2, 0, Math.PI); // X:90deg, Z:180deg
+                        // If you want to rotate horizontally only, adjust as needed:
+                        // window.player.rotation.set(0, Math.PI, 0);
+
+                        // Shield: ensure shield mesh is centered and sized correctly
+                        if (window.shieldMesh) {
+                            // Center shield on player, scale to fit model
+                            window.shieldMesh.position.set(0, 0, 0);
+                            window.shieldMesh.scale.set(1.2, 1.2, 1.2); // Adjust scale as needed
+                            window.shieldMesh.rotation.set(Math.PI / 2, 0, 0); // Match player orientation
+                        }
+                    }
+                }, 100);
+            }
+        }, 50);
+    });
+    </script>
     <script src="main.js"></script>
 </body>
 </html>
