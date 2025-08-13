@@ -26,6 +26,7 @@ let shieldMesh, thruster;
 // ========== GAME STATE ========== 
 let gameState = 'loading';
 let score = 0, health = 3;
+let level = 1, levelProgress = 0;
 let asteroidSpawnCounter = 0;
 let shieldActive = false, shieldTimer = 0, shieldCooldown = 0;
 
@@ -177,6 +178,7 @@ function clearGameObjects() {
 function resetGameStats() {
     clearGameObjects();
     score = 0; health = 3;
+    level = 1; levelProgress = 0;
     shieldActive = false; shieldTimer = 0; shieldCooldown = 0;
     if (player) {
         player.position.set(0, 0, 0);
@@ -200,7 +202,7 @@ function gameOver() {
     if(player) player.visible = false;
     
     setTimeout(() => {
-        alert(`GAME OVER\nDistance: ${(score / 1000).toFixed(1)} km`);
+        alert(`GAME OVER\nDistance: ${(score / 1000).toFixed(1)} km\nLevel Reached: ${level}`);
         quitToMenu();
     }, 500);
 }
@@ -220,17 +222,155 @@ function createExplosion(position) {
     }
 }
 
-function getAsteroidSpeed() { return 0.04 + Math.min(0.00008 * score, 0.18) + Math.random() * 0.025; }
-function getAsteroidSpawnInterval() { return Math.max(15, 60 - Math.floor(score / 500)); }
+function showBossWarning() {
+    // Create subtle boss warning at top of screen
+    const warning = document.createElement('div');
+    warning.className = 'boss-warning-subtle';
+    warning.innerHTML = `
+        <div class="boss-warning-subtle-content">
+            <span class="boss-warning-icon">⚠️</span>
+            <span class="boss-warning-text">BOSS INCOMING</span>
+            <span class="boss-warning-level">Level ${level}</span>
+        </div>
+    `;
+    document.body.appendChild(warning);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        if (warning.parentNode) {
+            warning.parentNode.removeChild(warning);
+        }
+    }, 4000);
+}
+
+function showLevelUp() {
+    // Create subtle notification at top of screen
+    const levelUp = document.createElement('div');
+    levelUp.className = 'level-up-subtle';
+    levelUp.innerHTML = `
+        <div class="level-up-subtle-content">
+            <span class="level-up-icon">🎉</span>
+            <span class="level-up-text">LEVEL ${level}</span>
+            <span class="level-up-bonus">+${(level * 0.05).toFixed(1)} Speed</span>
+        </div>
+    `;
+    document.body.appendChild(levelUp);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (levelUp.parentNode) {
+            levelUp.parentNode.removeChild(levelUp);
+        }
+    }, 3000);
+}
+
+// ========== LEVEL & DIFFICULTY SYSTEM ==========
+function getCurrentLevel() {
+    return Math.floor(score / 1000) + 1;
+}
+
+function getLevelProgress() {
+    return (score % 1000) / 10; // Progress bar 0-100%
+}
+
+function getAsteroidSpeed() { 
+    const baseSpeed = 0.5 + (level * 0.05); // Reduced base speed and level scaling
+    const scoreBonus = Math.min(0.00005 * score, 0.15); // Reduced score bonus
+    return baseSpeed + scoreBonus + Math.random() * 0.02; 
+}
+
+function getAsteroidSpawnInterval() { 
+    const baseInterval = Math.max(8, 40 - (level * 1.5)); // Slower spawn rate increase
+    const scoreReduction = Math.floor(score / 600); // Reduced spawn acceleration
+    return Math.max(5, baseInterval - scoreReduction); 
+}
+
+function getAsteroidSize() {
+    const sizeVariation = Math.random();
+    if (level >= 5 && sizeVariation < 0.3) {
+        return Math.random() * 0.3 + 0.3; // Small asteroids (fast, 1 hit)
+    } else if (level >= 3 && sizeVariation < 0.6) {
+        return Math.random() * 0.4 + 0.6; // Medium asteroids (normal, 2 hit)
+    } else {
+        return Math.random() * 0.5 + 0.8; // Large asteroids (slow, 3 hit)
+    }
+}
+
+function getAsteroidHealth() {
+    const size = getAsteroidSize();
+    if (size < 0.6) return 1;      // Small = 1 hit
+    else if (size < 1.0) return 2; // Medium = 2 hits
+    else return 3;                  // Large = 3 hits
+}
+
+function shouldSpawnBoss() {
+    return level % 5 === 0 && levelProgress >= 90; // Boss every 5 levels
+}
 
 function spawnAsteroid() {
     const lane = [-4, -2, 0, 2, 4][Math.floor(Math.random() * 5)];
-    const size = Math.random() * 0.5 + 0.5;
-    const ast = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), new THREE.MeshStandardMaterial({ color: 0xaaaaaa, flatShading: true }));
+    const size = getAsteroidSize();
+    const health = getAsteroidHealth();
+    
+    // Different colors based on size/health
+    let color = 0xaaaaaa; // Default gray
+    if (health === 1) color = 0xff6666;      // Red for small (fast)
+    else if (health === 2) color = 0xaaaaaa; // Gray for medium
+    else color = 0x666666;                    // Dark gray for large
+    
+    const ast = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(size, 0), 
+        new THREE.MeshStandardMaterial({ color: color, flatShading: true })
+    );
     ast.position.set(lane, 0, -100);
-    ast.userData = { speed: getAsteroidSpeed(), rotationSpeed: new THREE.Vector3(Math.random()*0.02-0.01, Math.random()*0.02-0.01, Math.random()*0.02-0.01) };
+    ast.userData = { 
+        speed: getAsteroidSpeed(), 
+        health: health,
+        maxHealth: health,
+        rotationSpeed: new THREE.Vector3(Math.random()*0.02-0.01, Math.random()*0.02-0.01, Math.random()*0.02-0.01) 
+    };
     scene.add(ast);
     asteroids.push(ast);
+}
+
+function spawnBossAsteroid() {
+    const bossSize = 2.5;
+    const bossHealth = level * 2; // Health scales with level
+    
+    const boss = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(bossSize, 1), 
+        new THREE.MeshStandardMaterial({ 
+            color: 0xff0000, 
+            flatShading: true,
+            emissive: 0x330000,
+            emissiveIntensity: 0.3
+        })
+    );
+    
+    boss.position.set(0, 0, -100);
+    boss.userData = { 
+        speed: getAsteroidSpeed() * 0.5, // Boss moves slower
+        health: bossHealth,
+        maxHealth: bossHealth,
+        isBoss: true,
+        rotationSpeed: new THREE.Vector3(0.01, 0.01, 0.01)
+    };
+    
+    // Add boss glow effect
+    const glowGeometry = new THREE.SphereGeometry(bossSize + 0.3, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000, 
+        transparent: true, 
+        opacity: 0.3 
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    boss.add(glow);
+    
+    scene.add(boss);
+    asteroids.push(boss);
+    
+    // Show boss warning
+    showBossWarning();
 }
 
 function shootBullet() {
@@ -274,14 +414,47 @@ function updatePlayingState() {
     if (keys['KeyD'] || keys['ArrowRight']) player.position.x += 0.2;
     player.position.x = Math.max(-5, Math.min(5, player.position.x));
 
+    // Update level and progress
+    const newLevel = getCurrentLevel();
+    if (newLevel > level) {
+        level = newLevel;
+        showLevelUp();
+    }
+    levelProgress = getLevelProgress();
+    
+    // Spawn asteroids
     asteroidSpawnCounter++;
-    if (asteroidSpawnCounter > getAsteroidSpawnInterval()) { spawnAsteroid(); asteroidSpawnCounter = 0; }
+    if (asteroidSpawnCounter > getAsteroidSpawnInterval()) { 
+        spawnAsteroid(); 
+        asteroidSpawnCounter = 0; 
+    }
+    
+    // Spawn boss if conditions are met
+    if (shouldSpawnBoss() && asteroids.every(ast => !ast.userData.isBoss)) {
+        spawnBossAsteroid();
+    }
     
     for (let i = asteroids.length - 1; i >= 0; i--) {
         const ast = asteroids[i];
         ast.position.z += ast.userData.speed;
+        
+        // Rotate asteroids
+        ast.rotation.x += ast.userData.rotationSpeed.x;
+        ast.rotation.y += ast.userData.rotationSpeed.y;
+        ast.rotation.z += ast.userData.rotationSpeed.z;
+        
         if (ast.position.z > 10) { scene.remove(ast); asteroids.splice(i, 1); continue; }
-        if (player.position.distanceTo(ast.position) < 1.2) { handleDamage(); scene.remove(ast); asteroids.splice(i, 1); }
+        
+        // Different collision distance based on shield and asteroid size
+        const baseCollisionDistance = ast.userData.isBoss ? 3.0 : 1.2;
+        const collisionDistance = shieldActive ? baseCollisionDistance + 0.8 : baseCollisionDistance;
+        
+        if (player.position.distanceTo(ast.position) < collisionDistance) { 
+            console.log('Collision detected! Distance:', player.position.distanceTo(ast.position), 'Shield active:', shieldActive);
+            handleDamage(); 
+            scene.remove(ast); 
+            asteroids.splice(i, 1); 
+        }
     }
 
     for (let i = bullets.length - 1; i >= 0; i--) {
@@ -290,10 +463,26 @@ function updatePlayingState() {
         if (b.position.z < -50) { scene.remove(b); bullets.splice(i, 1); continue; }
         for (let j = asteroids.length - 1; j >= 0; j--) {
             if (asteroids[j] && b.position.distanceTo(asteroids[j].position) < 1) {
-                createExplosion(asteroids[j].position);
-                scene.remove(asteroids[j]); asteroids.splice(j, 1);
+                const asteroid = asteroids[j];
+                asteroid.userData.health--;
+                
+                // Visual feedback for damage
+                if (asteroid.userData.health < asteroid.userData.maxHealth) {
+                    asteroid.material.emissive = new THREE.Color(0x333333);
+                    asteroid.material.emissiveIntensity = 0.5;
+                }
+                
+                if (asteroid.userData.health <= 0) {
+                    // Boss gives more points
+                    const points = asteroid.userData.isBoss ? level * 100 : 50;
+                    score += points;
+                    
+                    createExplosion(asteroid.position);
+                    scene.remove(asteroid); 
+                    asteroids.splice(j, 1);
+                }
+                
                 scene.remove(b); bullets.splice(i, 1);
-                score += 50;
                 break;
             }
         }
@@ -320,6 +509,21 @@ function handleDamage() { if (shieldActive) return; health--; updateHearts(); if
 // ========== UI & CONTROLS ========== 
 function updateHUD() {
     document.getElementById('distance').textContent = `${(score / 1000).toFixed(1)} km`;
+    
+    // Update level display
+    const levelDisplay = document.getElementById('level');
+    if (levelDisplay) {
+        levelDisplay.textContent = `LEVEL ${level}`;
+        levelDisplay.style.color = level >= 5 ? '#ff6600' : '#00ff88';
+    }
+    
+    // Update level progress
+    const progressDisplay = document.getElementById('level-progress');
+    if (progressDisplay) {
+        progressDisplay.textContent = `${Math.floor(levelProgress)}%`;
+        progressDisplay.style.color = levelProgress >= 90 ? '#ff0000' : '#ffffff';
+    }
+    
     const shieldDisplay = document.getElementById('shield');
     if (shieldActive) { shieldDisplay.textContent = `ACTIVE: ${Math.ceil(shieldTimer / 60)}s`; shieldDisplay.style.color = '#00ccff'; }
     else if (shieldCooldown > 0) { shieldDisplay.textContent = `COOLDOWN: ${Math.ceil(shieldCooldown / 60)}s`; shieldDisplay.style.color = '#ff6600'; }
